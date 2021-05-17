@@ -17,10 +17,16 @@
 #ifndef __TBB_test_conformance_conformance_flowgraph_H
 #define __TBB_test_conformance_conformance_flowgraph_H
 
+template <typename OutputType = int>
 struct passthru_body {
-    int operator()( int i ) {
+    OutputType operator()( const OutputType& i ) {
         return i;
     }
+
+    OutputType operator()( oneapi::tbb::flow::continue_msg ) {
+       return OutputType();
+    }
+
     void operator()( const int& argument, oneapi::tbb::flow::multifunction_node<int, std::tuple<int>>::output_ports_type &op ) {
        std::get<0>(op).try_put(argument);
     }
@@ -31,13 +37,14 @@ template<typename V>
 using test_push_receiver = oneapi::tbb::flow::queue_node<V>;
 
 template<typename V>
-int get_count( test_push_receiver<V>& rr ){
+std::vector<V> get_values( test_push_receiver<V>& rr ){
+    std::vector<V> messages;
     int val = 0;
-    for(V tmp; rr.try_get(tmp); ++val);
-
-    return val;
+    for(V tmp; rr.try_get(tmp); ++val){
+        messages.push_back(tmp);
+    }
+    return messages;
 }
-
 
 template< typename OutputType >
 struct first_functor {
@@ -68,23 +75,83 @@ struct first_functor {
 template<typename OutputType>
 std::atomic<int> first_functor<OutputType>::first_id;
 
+template< typename OutputType>
+struct counting_functor {
+    OutputType my_value;
 
-template< typename OutputType >
-struct inc_functor {
     static std::atomic<size_t> execute_count;
+
+    counting_functor(OutputType value = OutputType()) : my_value(value) {
+
+    }
 
     OutputType operator()( oneapi::tbb::flow::continue_msg ) {
        ++execute_count;
-       return OutputType();
+       return my_value;
     }
 
-    OutputType operator()( int argument ) {
+    OutputType operator()( OutputType argument ) {
        ++execute_count;
        return argument;
     }
 };
 
 template<typename OutputType>
-std::atomic<size_t> inc_functor<OutputType>::execute_count;
+std::atomic<size_t> counting_functor<OutputType>::execute_count;
+
+template< typename OutputType>
+struct dummy_functor {
+    OutputType operator()( oneapi::tbb::flow::continue_msg ) {
+       return OutputType();
+    }
+};
+
+struct barrier_body{
+    static std::atomic<bool> flag;
+
+    void operator()(oneapi::tbb::flow::continue_msg){
+        while(!flag.load()){ };
+    }
+};
+
+std::atomic<bool> barrier_body::flag{false};
+
+template<typename O>
+struct CountingObject{
+    size_t copy_count;
+    size_t assign_count;
+    size_t move_count;
+    bool is_copy;
+
+    CountingObject():
+        copy_count(0), assign_count(0), move_count(0), is_copy(false) {}
+
+    CountingObject(const CountingObject<O>& other):
+        copy_count(other.copy_count + 1), is_copy(true) {}
+
+    CountingObject& operator=(const CountingObject<O>& other) {
+        assign_count = other.assign_count + 1;
+        is_copy = true;
+        return *this;
+    }
+
+    CountingObject(CountingObject<O>&& other):
+         copy_count(other.copy_count), move_count(other.move_count + 1), is_copy(other.is_copy) {}
+
+    CountingObject& operator=(CountingObject<O>&& other) {
+        copy_count = other.copy_count;
+        is_copy = other.is_copy;
+        move_count = other.move_count + 1;
+        return *this;
+    }
+
+    O operator()(oneapi::tbb::flow::continue_msg){
+        return 1;
+    }
+
+    O operator()(O){
+        return 1;
+    }
+};
 
 #endif // __TBB_test_conformance_conformance_flowgraph_H

@@ -32,25 +32,9 @@
 //! \file conformance_continue_node.cpp
 //! \brief Test for [flow_graph.continue_node] specification
 
-/*
-TODO: implement missing conformance tests for continue_node:
-  - [ ] For `test_forwarding' check that the value passed is the actual one received.
-  - [ ] The `copy_body' function copies altered body (e.g. after its successful invocation).
-  - [ ] Improve CTAD test.
-  - [ ] Improve constructors test, including addition of calls to constructors with
-    `number_of_predecessors' parameter.
-  - [ ] Explicit test for copy constructor of the node.
-  - [ ] Rewrite test_priority.
-  - [ ] Check `Output' type indeed copy-constructed and copy-assigned while working with the node.
-  - [ ] Explicit test for correct working of `number_of_predecessors' constructor parameter,
-    including taking it into account when making and removing edges.
-  - [ ] Add testing of `try_put' statement. In particular that it does not wait for the execution of
-    the body to complete.
-*/
-
 void test_cont_body(){
     oneapi::tbb::flow::graph g;
-    inc_functor<int> cf;
+    counting_functor<int> cf;
     cf.execute_count = 0;
 
     oneapi::tbb::flow::continue_node<int> node1(g, cf);
@@ -75,18 +59,91 @@ void test_inheritance(){
 }
 
 #if __TBB_CPP17_DEDUCTION_GUIDES_PRESENT
-void test_deduction_guides(){
-    oneapi::tbb::flow::graph g;
-    inc_functor<int> fun;
-    oneapi::tbb::flow::continue_node node1(g, fun);
+
+template <typename ExpectedType, typename Body>
+void test_deduction_guides_common(Body body) {
+    using namespace tbb::flow;
+    graph g;
+
+    continue_node c1(g, body);
+    static_assert(std::is_same_v<decltype(c1), continue_node<ExpectedType>>);
+
+    continue_node c2(g, body, lightweight());
+    static_assert(std::is_same_v<decltype(c2), continue_node<ExpectedType, lightweight>>);
+
+    continue_node c3(g, 5, body);
+    static_assert(std::is_same_v<decltype(c3), continue_node<ExpectedType>>);
+
+    continue_node c4(g, 5, body, lightweight());
+    static_assert(std::is_same_v<decltype(c4), continue_node<ExpectedType, lightweight>>);
+
+    continue_node c5(g, body, node_priority_t(5));
+    static_assert(std::is_same_v<decltype(c5), continue_node<ExpectedType>>);
+
+    continue_node c6(g, body, lightweight(), node_priority_t(5));
+    static_assert(std::is_same_v<decltype(c6), continue_node<ExpectedType, lightweight>>);
+
+    continue_node c7(g, 5, body, node_priority_t(5));
+    static_assert(std::is_same_v<decltype(c7), continue_node<ExpectedType>>);
+
+    continue_node c8(g, 5, body, lightweight(), node_priority_t(5));
+    static_assert(std::is_same_v<decltype(c8), continue_node<ExpectedType, lightweight>>);
+
+#if __TBB_PREVIEW_FLOW_GRAPH_NODE_SET
+    broadcast_node<continue_msg> b(g);
+
+    continue_node c9(follows(b), body);
+    static_assert(std::is_same_v<decltype(c9), continue_node<ExpectedType>>);
+
+    continue_node c10(follows(b), body, lightweight());
+    static_assert(std::is_same_v<decltype(c10), continue_node<ExpectedType, lightweight>>);
+
+    continue_node c11(follows(b), 5, body);
+    static_assert(std::is_same_v<decltype(c11), continue_node<ExpectedType>>);
+
+    continue_node c12(follows(b), 5, body, lightweight());
+    static_assert(std::is_same_v<decltype(c12), continue_node<ExpectedType, lightweight>>);
+
+    continue_node c13(follows(b), body, node_priority_t(5));
+    static_assert(std::is_same_v<decltype(c13), continue_node<ExpectedType>>);
+
+    continue_node c14(follows(b), body, lightweight(), node_priority_t(5));
+    static_assert(std::is_same_v<decltype(c14), continue_node<ExpectedType, lightweight>>);
+
+    continue_node c15(follows(b), 5, body, node_priority_t(5));
+    static_assert(std::is_same_v<decltype(c15), continue_node<ExpectedType>>);
+
+    continue_node c16(follows(b), 5, body, lightweight(), node_priority_t(5));
+    static_assert(std::is_same_v<decltype(c16), continue_node<ExpectedType, lightweight>>);
+#endif // __TBB_PREVIEW_FLOW_GRAPH_NODE_SET
+
+    continue_node c17(c1);
+    static_assert(std::is_same_v<decltype(c17), continue_node<ExpectedType>>);
 }
-#endif
+
+int continue_body_f(const tbb::flow::continue_msg&) { return 1; }
+void continue_void_body_f(const tbb::flow::continue_msg&) {}
+
+void test_deduction_guides() {
+    using tbb::flow::continue_msg;
+    test_deduction_guides_common<int>([](const continue_msg&)->int { return 1; } );
+    test_deduction_guides_common<continue_msg>([](const continue_msg&) {});
+
+    test_deduction_guides_common<int>([](const continue_msg&) mutable ->int { return 1; });
+    test_deduction_guides_common<continue_msg>([](const continue_msg&) mutable {});
+
+    test_deduction_guides_common<int>(continue_body_f);
+    test_deduction_guides_common<continue_msg>(continue_void_body_f);
+}
+
+#endif // __TBB_CPP17_DEDUCTION_GUIDES_PRESENT
 
 void test_forwarding(){
     oneapi::tbb::flow::graph g;
-    inc_functor<int> fun;
+    constexpr int expected = 5;
+    counting_functor<int> fun(expected);
     fun.execute_count = 0;
-    
+
     oneapi::tbb::flow::continue_node<int> node1(g, fun);
     test_push_receiver<int> node2(g);
     test_push_receiver<int> node3(g);
@@ -97,13 +154,18 @@ void test_forwarding(){
     node1.try_put(oneapi::tbb::flow::continue_msg());
     g.wait_for_all();
 
-    CHECK_MESSAGE( (get_count(node2) == 1), "Descendant of the node must receive one message.");
-    CHECK_MESSAGE( (get_count(node3) == 1), "Descendant of the node must receive one message.");
+    auto values2 = get_values(node2);
+    auto values3 = get_values(node3);
+
+    CHECK_MESSAGE( (values2.size() == 1), "Descendant of the node must receive one message.");
+    CHECK_MESSAGE( (values3.size() == 1), "Descendant of the node must receive one message.");
+    CHECK_MESSAGE( (values2[0] == expected), "Value passed is the actual one received.");
+    CHECK_MESSAGE( (values2 == values3), "Value passed is the actual one received.");
 }
 
 void test_buffering(){
     oneapi::tbb::flow::graph g;
-    inc_functor<int> fun;
+    dummy_functor<int> fun;
 
     oneapi::tbb::flow::continue_node<int> node(g, fun);
     oneapi::tbb::flow::limiter_node<int> rejecter(g, 0);
@@ -117,56 +179,89 @@ void test_buffering(){
     g.wait_for_all();
 }
 
-void test_policy_ctors(){
-    using namespace oneapi::tbb::flow;
-    graph g;
-
-    inc_functor<int> fun;
-
-    continue_node<int, lightweight> lw_node(g, fun);
-}
-
 void test_ctors(){
     using namespace oneapi::tbb::flow;
     graph g;
 
-    inc_functor<int> fun;
+    counting_functor<int> fun;
 
-    continue_node<int> proto1(g, 2, fun, oneapi::tbb::flow::node_priority_t(1));
+    continue_node<int> proto1(g, fun);
+    continue_node<int> proto2(g, fun, oneapi::tbb::flow::node_priority_t(1));
+    continue_node<int> proto3(g, 2, fun);
+    continue_node<int> proto4(g, 2, fun, oneapi::tbb::flow::node_priority_t(1));
+
+    continue_node<int, lightweight> lw_node1(g, fun, lightweight());
+    continue_node<int, lightweight> lw_node2(g, fun, lightweight(), oneapi::tbb::flow::node_priority_t(1));
+    continue_node<int, lightweight> lw_node3(g, 2, fun, lightweight());
+    continue_node<int, lightweight> lw_node4(g, 2, fun, lightweight(), oneapi::tbb::flow::node_priority_t(1));
 }
 
-template<typename O>
-struct CopyCounterBody{
-    size_t copy_count;
+void test_copy_ctor(){
+    using namespace oneapi::tbb::flow;
+    graph g;
 
-    CopyCounterBody():
-        copy_count(0) {}
+    counting_functor<int> fun;
 
-    CopyCounterBody(const CopyCounterBody<O>& other):
-        copy_count(other.copy_count + 1) {}
+    continue_node<oneapi::tbb::flow::continue_msg> node0(g, fun);
+    continue_node<oneapi::tbb::flow::continue_msg> node1(g, 2, fun);
+    test_push_receiver<oneapi::tbb::flow::continue_msg> node2(g);
+    test_push_receiver<oneapi::tbb::flow::continue_msg> node3(g);
 
-    CopyCounterBody& operator=(const CopyCounterBody<O>& other){
-        copy_count = other.copy_count + 1;
-        return *this;
-    }
+    oneapi::tbb::flow::make_edge(node0, node1);
+    oneapi::tbb::flow::make_edge(node1, node2);
 
-    O operator()(oneapi::tbb::flow::continue_msg){
-        return 1;
-    }
-};
+    continue_node<oneapi::tbb::flow::continue_msg> node_copy(node1);
+
+    oneapi::tbb::flow::make_edge(node_copy, node3);
+
+    node_copy.try_put(oneapi::tbb::flow::continue_msg());
+    g.wait_for_all();
+
+    CHECK_MESSAGE( (get_values(node2).size() == 0 && get_values(node3).size() == 0), "Copied node doesn`t copy successor, but copy number of predecessors");
+
+    node_copy.try_put(oneapi::tbb::flow::continue_msg());
+    g.wait_for_all();
+
+    CHECK_MESSAGE( (get_values(node2).size() == 0 && get_values(node3).size() == 1), "Copied node doesn`t copy successor, but copy number of predecessors");
+
+    node1.try_put(oneapi::tbb::flow::continue_msg());
+    node1.try_put(oneapi::tbb::flow::continue_msg());
+    node0.try_put(oneapi::tbb::flow::continue_msg());
+    g.wait_for_all();
+
+    CHECK_MESSAGE( (get_values(node2).size() == 1 && get_values(node3).size() == 0), "Copied node doesn`t copy predecessor, but copy number of predecessors");
+}
 
 void test_copies(){
     using namespace oneapi::tbb::flow;
 
-    CopyCounterBody<int> b;
+    CountingObject<int> b;
 
     graph g;
     continue_node<int> fn(g, b);
 
-    CopyCounterBody<int> b2 = copy_body<CopyCounterBody<int>,
+    CountingObject<int> b2 = copy_body<CountingObject<int>,
                                              continue_node<int>>(fn);
 
     CHECK_MESSAGE( (b.copy_count + 2 <= b2.copy_count), "copy_body and constructor should copy bodies");
+    CHECK_MESSAGE( (b.is_copy != b2.is_copy), "copy_body and constructor should copy bodies");
+}
+
+void test_output_class(){
+    using namespace oneapi::tbb::flow;
+
+    passthru_body<CountingObject<int>> fun;
+
+    graph g;
+    continue_node<CountingObject<int>> node1(g, fun);
+    test_push_receiver<CountingObject<int>> node2(g);
+    make_edge(node1, node2);
+    
+    node1.try_put(oneapi::tbb::flow::continue_msg());
+    g.wait_for_all();
+    CountingObject<int> b;
+    node2.try_get(b);
+    DOCTEST_WARN_MESSAGE( (b.is_copy), "The type Output must meet the CopyConstructible requirements");
 }
 
 
@@ -178,7 +273,6 @@ void test_priority(){
 
     oneapi::tbb::flow::continue_node<oneapi::tbb::flow::continue_msg> source(g,
                                                              [](oneapi::tbb::flow::continue_msg){ return oneapi::tbb::flow::continue_msg();});
-    source.try_put(oneapi::tbb::flow::continue_msg());
 
     first_functor<int>::first_id = -1;
     first_functor<int> low_functor(1);
@@ -190,15 +284,58 @@ void test_priority(){
     make_edge(source, low);
     make_edge(source, high);
 
-    g.wait_for_all();
+    source.try_put(oneapi::tbb::flow::continue_msg());
 
+    g.wait_for_all();
+    
     CHECK_MESSAGE( (first_functor<int>::first_id == 2), "High priority node should execute first");
+}
+
+void test_number_of_predecessors(){
+    oneapi::tbb::flow::graph g;
+
+    counting_functor<int> fun;
+    fun.execute_count = 0;
+
+    oneapi::tbb::flow::continue_node<oneapi::tbb::flow::continue_msg> node1(g, fun);
+    oneapi::tbb::flow::continue_node<oneapi::tbb::flow::continue_msg> node2(g, 1, fun);
+    oneapi::tbb::flow::continue_node<oneapi::tbb::flow::continue_msg> node3(g, 1, fun);
+    oneapi::tbb::flow::continue_node<int> node4(g, fun); 
+
+    oneapi::tbb::flow::make_edge(node1, node2);
+    oneapi::tbb::flow::make_edge(node2, node4);
+    oneapi::tbb::flow::make_edge(node1, node3);
+    oneapi::tbb::flow::make_edge(node1, node3);
+    oneapi::tbb::flow::remove_edge(node1, node3);
+    oneapi::tbb::flow::make_edge(node3, node4);
+    node3.try_put(oneapi::tbb::flow::continue_msg());
+    node2.try_put(oneapi::tbb::flow::continue_msg());
+    node1.try_put(oneapi::tbb::flow::continue_msg());
+
+    g.wait_for_all();
+    CHECK_MESSAGE( (fun.execute_count == 4), "Node wait for their predecessors to complete before executing");
+}
+
+void test_try_put() {
+    barrier_body body;
+    oneapi::tbb::flow::graph g;
+
+    oneapi::tbb::flow::continue_node<oneapi::tbb::flow::continue_msg> node1(g, body);
+    node1.try_put(oneapi::tbb::flow::continue_msg());
+    barrier_body::flag.store(true);
+    g.wait_for_all();
 }
 
 //! Test node costructors
 //! \brief \ref requirement
 TEST_CASE("continue_node constructors"){
     test_ctors();
+}
+
+//! Test node costructors
+//! \brief \ref requirement
+TEST_CASE("continue_node copy constructor"){
+    test_copy_ctor();
 }
 
 //! Test priorities work in single-threaded configuration
@@ -211,12 +348,6 @@ TEST_CASE("continue_node priority support"){
 //! \brief \ref interface
 TEST_CASE("continue_node and body copying"){
     test_copies();
-}
-
-//! Test constructors
-//! \brief \ref interface
-TEST_CASE("continue_node constructors"){
-    test_policy_ctors();
 }
 
 //! Test continue_node buffering
@@ -250,4 +381,22 @@ TEST_CASE("continue_node superclasses"){
 //! \brief \ref interface \ref requirement
 TEST_CASE("continue body") {
     test_cont_body();
+}
+
+//! Test body execution
+//! \brief \ref interface \ref requirement
+TEST_CASE("continue_node number_of_predecessors") {
+    test_number_of_predecessors();
+}
+
+//! Test body execution
+//! \brief \ref interface \ref requirement
+TEST_CASE("continue_node Output class") {
+    test_output_class();
+}
+
+//! Test body execution
+//! \brief \ref interface \ref requirement
+TEST_CASE("continue_node `try_put' statement not wait for the execution of the body to complete.") {
+    test_try_put();
 }

@@ -34,21 +34,21 @@
 
 /*
 TODO: implement missing conformance tests for function_node:
-  - [ ] Constructor with explicitly passed Policy parameter: `template<typename Body> function_node(
+  - [X] Constructor with explicitly passed Policy parameter: `template<typename Body> function_node(
     graph &g, size_t concurrency, Body body, Policy(), node_priority_t, priority = no_priority )'
-  - [ ] Explicit test for copy constructor of the node.
-  - [ ] Rename test_broadcast to test_forwarding and check that the value passed is the actual one
+  - [X] Explicit test for copy constructor of the node.
+  - [X] Rename test_broadcast to test_forwarding and check that the value passed is the actual one
     received.
   - [ ] Concurrency testing of the node: make a loop over possible concurrency levels. It is
     important to test at least on five values: 1, oneapi::tbb::flow::serial, `max_allowed_parallelism'
     obtained from `oneapi::tbb::global_control', `oneapi::tbb::flow::unlimited', and, if `max allowed
     parallelism' is > 2, use something in the middle of the [1, max_allowed_parallelism]
     interval. Use `utils::ExactConcurrencyLevel' entity (extending it if necessary).
-  - [ ] make `test_rejecting' deterministic, i.e. avoid dependency on OS scheduling of the threads;
+  - [?] make `test_rejecting' deterministic, i.e. avoid dependency on OS scheduling of the threads;
     add check that `try_put()' returns `false'
-  - [ ] The copy constructor and copy assignment are called for the node's input and output types.
-  - [ ] The `copy_body' function copies altered body (e.g. after successful `try_put()' call).
-  - [ ] Extend CTAD test to check all node's constructors.
+  - [*] The copy constructor and copy assignment are called for the node's input and output types.l
+  - [X] The `copy_body' function copies altered body (e.g. after successful `try_put()' call).
+  - [X] Extend CTAD test to check all node's constructors.
 */
 
 std::atomic<size_t> my_concurrency;
@@ -76,7 +76,7 @@ struct concurrency_functor {
 
 void test_func_body(){
     oneapi::tbb::flow::graph g;
-    inc_functor<int> fun;
+    counting_functor<int> fun;
     fun.execute_count = 0;
 
     oneapi::tbb::flow::function_node<int, int> node1(g, oneapi::tbb::flow::unlimited, fun);
@@ -115,19 +115,57 @@ void test_priority(){
 }
 
 #if __TBB_CPP17_DEDUCTION_GUIDES_PRESENT
-void test_deduction_guides(){
-    using namespace oneapi::tbb::flow;
+
+int function_body_f(const int&) { return 1; }
+
+template <typename Body>
+void test_deduction_guides_common(Body body) {
+    using namespace tbb::flow;
     graph g;
 
-    auto body = [](const int&)->int { return 1; };
     function_node f1(g, unlimited, body);
-    CHECK_MESSAGE((std::is_same_v<decltype(f1), function_node<int, int>>), "Function node type must be deducible from its body");
+    static_assert(std::is_same_v<decltype(f1), function_node<int, int>>);
+
+    function_node f2(g, unlimited, body, rejecting());
+    static_assert(std::is_same_v<decltype(f2), function_node<int, int, rejecting>>);
+
+    function_node f3(g, unlimited, body, node_priority_t(5));
+    static_assert(std::is_same_v<decltype(f3), function_node<int, int>>);
+
+    function_node f4(g, unlimited, body, rejecting(), node_priority_t(5));
+    static_assert(std::is_same_v<decltype(f4), function_node<int, int, rejecting>>);
+
+#if __TBB_PREVIEW_FLOW_GRAPH_NODE_SET
+    function_node f5(follows(f2), unlimited, body);
+    static_assert(std::is_same_v<decltype(f5), function_node<int, int>>);
+
+    function_node f6(follows(f5), unlimited, body, rejecting());
+    static_assert(std::is_same_v<decltype(f6), function_node<int, int, rejecting>>);
+
+    function_node f7(follows(f6), unlimited, body, node_priority_t(5));
+    static_assert(std::is_same_v<decltype(f7), function_node<int, int>>);
+
+    function_node f8(follows(f7), unlimited, body, rejecting(), node_priority_t(5));
+    static_assert(std::is_same_v<decltype(f8), function_node<int, int, rejecting>>);
+#endif // __TBB_PREVIEW_FLOW_GRAPH_NODE_SET
+
+    function_node f9(f1);
+    static_assert(std::is_same_v<decltype(f9), function_node<int, int>>);
 }
+
+void test_deduction_guides() {
+    test_deduction_guides_common([](const int&)->int { return 1; });
+    test_deduction_guides_common([](const int&) mutable ->int { return 1; });
+    test_deduction_guides_common(function_body_f);
+}
+
 #endif
 
-void test_broadcast(){
+void test_forvarding(){
     oneapi::tbb::flow::graph g;
-    passthru_body fun;
+    const int expected = 5;
+    counting_functor<int> fun;
+    fun.execute_count = 0;
 
     oneapi::tbb::flow::function_node<int, int> node1(g, oneapi::tbb::flow::unlimited, fun);
     test_push_receiver<int> node2(g);
@@ -136,17 +174,22 @@ void test_broadcast(){
     oneapi::tbb::flow::make_edge(node1, node2);
     oneapi::tbb::flow::make_edge(node1, node3);
 
-    node1.try_put(1);
+    node1.try_put(expected);
     g.wait_for_all();
 
-    CHECK_MESSAGE( (get_count(node2) == 1), "Descendant of the node must receive one message.");
-    CHECK_MESSAGE( (get_count(node3) == 1), "Descendant of the node must receive one message.");
+    auto values2 = get_values(node2);
+    auto values3 = get_values(node3);
+
+    CHECK_MESSAGE( (values2.size() == 1), "Descendant of the node must receive one message.");
+    CHECK_MESSAGE( (values3.size() == 1), "Descendant of the node must receive one message.");
+    CHECK_MESSAGE( (values2[0] == expected), "Value passed is the actual one received.");
+    CHECK_MESSAGE( (values2 == values3), "Value passed is the actual one received.");
 }
 
 template<typename Policy>
 void test_buffering(){
     oneapi::tbb::flow::graph g;
-    passthru_body fun;
+    counting_functor<int> fun;
 
     oneapi::tbb::flow::function_node<int, int, Policy> node(g, oneapi::tbb::flow::unlimited, fun);
     oneapi::tbb::flow::limiter_node<int> rejecter(g, 0);
@@ -161,6 +204,12 @@ void test_buffering(){
 }
 
 void test_node_concurrency(){
+
+    /*Concurrency testing of the node: make a loop over possible concurrency levels. It is
+    important to test at least on five values: 1, oneapi::tbb::flow::serial, `max_allowed_parallelism'
+    obtained from `oneapi::tbb::global_control', `oneapi::tbb::flow::unlimited', and, if `max allowed
+    parallelism' is > 2, use something in the middle of the [1, max_allowed_parallelism]
+    interval. Use `utils::ExactConcurrencyLevel' entity (extending it if necessary).*/
     my_concurrency = 0;
     my_max_concurrency = 0;
 
@@ -190,71 +239,81 @@ void test_inheritance(){
     CHECK_MESSAGE( (std::is_base_of<sender<O>, function_node<I, O>>::value), "function_node should be derived from sender<Output>");
 }
 
-void test_policy_ctors(){
-    using namespace oneapi::tbb::flow;
-    graph g;
-
-    function_node<int, int, lightweight> lw_node(g, oneapi::tbb::flow::serial,
-                                                          [](int v) { return v;});
-    function_node<int, int, queueing_lightweight> qlw_node(g, oneapi::tbb::flow::serial,
-                                                          [](int v) { return v;});
-    function_node<int, int, rejecting_lightweight> rlw_node(g, oneapi::tbb::flow::serial,
-                                                          [](int v) { return v;});
-
-}
-
-class stateful_functor{
-public:
-    int stored;
-    stateful_functor(): stored(-1){}
-    int operator()(int value){ stored = 1; return value;}
-};
-    
 void test_ctors(){
     using namespace oneapi::tbb::flow;
     graph g;
 
-    function_node<int, int> fn(g, unlimited, stateful_functor());
-    fn.try_put(0);
-    g.wait_for_all();
+    counting_functor<int> fun;
 
-    stateful_functor b1 = copy_body<stateful_functor, function_node<int, int>>(fn);
-    CHECK_MESSAGE( (b1.stored == 1), "First node should update");
-    
-    function_node<int, int> fn2(fn);
-    stateful_functor b2 = copy_body<stateful_functor, function_node<int, int>>(fn2);
-    CHECK_MESSAGE( (b2.stored == -1), "Copied node should not update");
+    function_node<int, int> fn1(g, unlimited, fun);
+    function_node<int, int> fn2(g, unlimited, fun, oneapi::tbb::flow::node_priority_t(1));
+
+    function_node<int, int, lightweight> lw_node1(g, serial, fun, lightweight());
+    function_node<int, int, lightweight> lw_node2(g, serial, fun, lightweight(), oneapi::tbb::flow::node_priority_t(1));
 }
 
-template<typename I, typename O>
-struct CopyCounterBody{
-    size_t copy_count;
+void test_copy_ctor(){
+    using namespace oneapi::tbb::flow;
+    graph g;
 
-    CopyCounterBody():
-        copy_count(0) {}
+    counting_functor<int> fun;
 
-    CopyCounterBody(const CopyCounterBody<I, O>& other):
-        copy_count(other.copy_count + 1) {}
+    function_node<int, int> node0(g, unlimited, fun);
+    function_node<int, oneapi::tbb::flow::continue_msg> node1(g, unlimited, fun);
+    test_push_receiver<oneapi::tbb::flow::continue_msg> node2(g);
+    test_push_receiver<oneapi::tbb::flow::continue_msg> node3(g);
 
-    CopyCounterBody& operator=(const CopyCounterBody<I, O>& other)
-    { copy_count = other.copy_count + 1; return *this;}
+    oneapi::tbb::flow::make_edge(node0, node1);
+    oneapi::tbb::flow::make_edge(node1, node2);
 
-    O operator()(I in){
-        return in;
-    }
-};
+    function_node<int, oneapi::tbb::flow::continue_msg> node_copy(node1);
+
+    oneapi::tbb::flow::make_edge(node_copy, node3);
+
+    node_copy.try_put(1);
+    g.wait_for_all();
+
+    CHECK_MESSAGE( (get_values(node2).size() == 0 && get_values(node3).size() == 1), "Copied node doesn`t copy successor, but copy number of predecessors");
+
+    node0.try_put(1);
+    g.wait_for_all();
+
+    CHECK_MESSAGE( (get_values(node2).size() == 1 && get_values(node3).size() == 0), "Copied node doesn`t copy predecessor, but copy number of predecessors");
+    /*check copy body*/
+}
 
 void test_copies(){
     using namespace oneapi::tbb::flow;
 
-    CopyCounterBody<int, int> b;
+    CountingObject<int> b;
 
     graph g;
     function_node<int, int> fn(g, unlimited, b);
 
-    CopyCounterBody<int, int> b2 = copy_body<CopyCounterBody<int, int>, function_node<int, int>>(fn);
+    CountingObject<int> b2 = copy_body<CountingObject<int>, function_node<int, int>>(fn);
 
     CHECK_MESSAGE( (b.copy_count + 2 <= b2.copy_count), "copy_body and constructor should copy bodies");
+    CHECK_MESSAGE( (b.is_copy != b2.is_copy), "copy_body and constructor should copy bodies");
+}
+
+void test_output_input_class(){
+    using namespace oneapi::tbb::flow;
+
+    passthru_body<CountingObject<int>> fun;
+
+    graph g;
+    function_node<oneapi::tbb::flow::continue_msg, CountingObject<int>> node1(g, unlimited, fun);
+    function_node<CountingObject<int>, CountingObject<int>> node2(g, unlimited, fun);
+    test_push_receiver<CountingObject<int>> node3(g);
+    make_edge(node1, node2);
+    make_edge(node2, node3);
+    /*Check Input class*/
+    node1.try_put(oneapi::tbb::flow::continue_msg());
+    g.wait_for_all();
+    CountingObject<int> b;
+    node3.try_get(b);
+    DOCTEST_WARN_MESSAGE( (b.copy_count == 1), "The type Output must meet the CopyConstructible requirements");
+    DOCTEST_WARN_MESSAGE( (b.assign_count == 1), "The type Output must meet the CopyConstructible requirements");
 }
 
 void test_rejecting(){
@@ -271,12 +330,27 @@ void test_rejecting(){
 
     make_edge(fnode, sink);
 
+    bool try_put_state;
+
     for(int i = 0; i < 10; ++i){
-        fnode.try_put(i);
+        try_put_state = fnode.try_put(i);
     }
 
     g.wait_for_all();
-    CHECK_MESSAGE( (get_count(sink) == 1), "Messages should be rejected while the first is being processed");
+    CHECK_MESSAGE( (get_values(sink).size() == 1), "Messages should be rejected while the first is being processed");
+    CHECK_MESSAGE( (!try_put_state), "`try_put()' should returns `false' after rejecting");
+}
+
+//! Test function_node costructors
+//! \brief \ref requirement
+TEST_CASE("function_node constructors"){
+    test_ctors();
+}
+
+//! Test function_node costructors
+//! \brief \ref requirement
+TEST_CASE("function_node copy constructor"){
+    test_copy_ctor();
 }
 
 //! Test function_node with rejecting policy
@@ -289,12 +363,6 @@ TEST_CASE("function_node with rejecting policy"){
 //! \brief \ref interface
 TEST_CASE("function_node and body copying"){
     test_copies();
-}
-
-//! Test constructors
-//! \brief \ref interface
-TEST_CASE("function_node constructors"){
-    test_policy_ctors();
 }
 
 //! Test inheritance relations
@@ -314,7 +382,7 @@ TEST_CASE("function_node buffering"){
 //! Test function_node broadcasting
 //! \brief \ref requirement
 TEST_CASE("function_node broadcast"){
-    test_broadcast();
+    test_forvarding();
 }
 
 //! Test deduction guides
