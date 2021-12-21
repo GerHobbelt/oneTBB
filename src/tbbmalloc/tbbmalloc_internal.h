@@ -492,8 +492,16 @@ private:
         MALLOC_ASSERT(!pageSize, "Huge page size can't be set twice. Double initialization.");
 
         // Initialize object variables
-        pageSize       = hugePageSize * 1024; // was read in KB from meminfo
-        isHPAvailable  = hpAvailable;
+        // CMA Modifiication Start
+        //pageSize       = hugePageSize * 1024; // was read in KB from meminfo
+        //isHPAvailable  = hpAvailable;
+        LUID luid;
+        isHPAvailable = LookupPrivilegeValueW(nullptr, L"SeLockMemoryPrivilege", &luid);
+        if (isHPAvailable)
+            pageSize = GetLargePageMinimum();
+        else
+            pageSize = 0;
+        // CMA Modifiication End
         isTHPAvailable = thpAvailable;
     }
 

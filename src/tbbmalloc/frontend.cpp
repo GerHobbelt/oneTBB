@@ -14,6 +14,8 @@
     limitations under the License.
 */
 
+#include "cma.h" // CMA Modification
+
 #include "tbbmalloc_internal.h"
 #include <errno.h>
 #include <new>        /* for placement new */
@@ -2062,6 +2064,7 @@ static bool GetBoolEnvironmentVariable(const char* name) {
     There is no need to call this routine if mallocInitialized==2 . */
 static bool doInitialization()
 {
+    bool useLargePages = CmaInit(); // CMA Modification
     MallocMutex::scoped_lock lock( initMutex );
     if (mallocInitialized.load(std::memory_order_relaxed)!=2) {
         MALLOC_ASSERT( mallocInitialized.load(std::memory_order_relaxed)==0, ASSERT_TEXT );
@@ -2089,6 +2092,7 @@ static bool doInitialization()
     }
     /* It can't be 0 or I would have initialized it */
     MALLOC_ASSERT( mallocInitialized.load(std::memory_order_relaxed)==2, ASSERT_TEXT );
+    if (useLargePages) scalable_allocation_mode(USE_HUGE_PAGES, 1); // CMA Modification
     return true;
 }
 
@@ -2927,6 +2931,7 @@ extern "C" void __TBB_mallocProcessShutdownNotification(bool windows_process_dyi
 #endif
     if (!usedBySrcIncluded)
         MALLOC_ITT_FINI_ITTLIB();
+    CmaExit(); // CMA Modification
 }
 
 extern "C" void * scalable_malloc(size_t size)
@@ -3249,7 +3254,7 @@ extern "C" int scalable_allocation_mode(int param, intptr_t value)
         defaultMemPool->extMemPool.backend.setRecommendedMaxSize((size_t)value);
         return TBBMALLOC_OK;
     } else if (param == USE_HUGE_PAGES) {
-#if __unix__
+//#if __unix__ // CMA Modification
         switch (value) {
         case 0:
         case 1:
@@ -3258,9 +3263,9 @@ extern "C" int scalable_allocation_mode(int param, intptr_t value)
         default:
             return TBBMALLOC_INVALID_PARAM;
         }
-#else
-        return TBBMALLOC_NO_EFFECT;
-#endif
+//#else // CMA Modification
+//        return TBBMALLOC_NO_EFFECT;
+//#endif
 #if __TBB_SOURCE_DIRECTLY_INCLUDED
     } else if (param == TBBMALLOC_INTERNAL_SOURCE_INCLUDED) {
         switch (value) {
