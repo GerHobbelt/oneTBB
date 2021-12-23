@@ -17,12 +17,8 @@ add_library(tbbmalloc
     cma.h
     cma_api.cpp
     cma_api.h
-    cma_config.cpp
-    cma_config.h
     cma_stats.cpp
     cma_stats.h
-    cma_util.cpp
-    cma_util.h
     backend.cpp
     backref.cpp
     frontend.cpp

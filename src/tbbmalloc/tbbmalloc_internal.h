@@ -14,6 +14,8 @@
     limitations under the License.
 */
 
+#include "cma.h" // Arma 3 CMA
+
 #ifndef __TBB_tbbmalloc_internal_H
 #define __TBB_tbbmalloc_internal_H
 
@@ -492,17 +494,15 @@ private:
         MALLOC_ASSERT(!pageSize, "Huge page size can't be set twice. Double initialization.");
 
         // Initialize object variables
-        // CMA Modifiication Start
-        //pageSize       = hugePageSize * 1024; // was read in KB from meminfo
-        //isHPAvailable  = hpAvailable;
-        LUID luid;
-        isHPAvailable = LookupPrivilegeValueW(nullptr, L"SeLockMemoryPrivilege", &luid);
+        pageSize       = hugePageSize * 1024; // was read in KB from meminfo
+        isHPAvailable  = hpAvailable;
+        isTHPAvailable = thpAvailable;
+
+#if WIN32 // Arma 3 CMA - Support huge pages on Windows OS
+        isHPAvailable = CmaAssignLockMemoryPrivileges();
         if (isHPAvailable)
             pageSize = GetLargePageMinimum();
-        else
-            pageSize = 0;
-        // CMA Modifiication End
-        isTHPAvailable = thpAvailable;
+#endif // Arma 3 CMA - End
     }
 
 public:
