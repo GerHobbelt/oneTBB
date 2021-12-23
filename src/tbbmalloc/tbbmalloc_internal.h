@@ -14,6 +14,8 @@
     limitations under the License.
 */
 
+#include "./cma/cma_utils.h" // Arma 3 CMA
+
 #ifndef __TBB_tbbmalloc_internal_H
 #define __TBB_tbbmalloc_internal_H
 
@@ -495,6 +497,12 @@ private:
         pageSize       = hugePageSize * 1024; // was read in KB from meminfo
         isHPAvailable  = hpAvailable;
         isTHPAvailable = thpAvailable;
+
+#if _WIN64 // Arma 3 CMA - Support huge pages on Windows OS
+        isHPAvailable = CmaAcquireLockMemoryPrivileges();
+        if (isHPAvailable)
+            pageSize = GetLargePageMinimum();
+#endif // Arma 3 CMA - End
     }
 
 public:

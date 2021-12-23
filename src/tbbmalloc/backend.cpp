@@ -33,10 +33,16 @@ namespace internal {
   sets errno must be protected this way, not just memory allocation per se.
 */
 
+#if (_WIN32 || _WIN64) && USE_DEFAULT_MEMORY_MAPPING // Arma 3 CMA - Implement MapMemory with huge pages support
+#undef USE_DEFAULT_MEMORY_MAPPING
+#define USE_DEFAULT_MEMORY_MAPPING 0
+#endif // Arma 3 CMA - End
+
 #if USE_DEFAULT_MEMORY_MAPPING
 #include "MapMemory.h"
 #else
 /* assume MapMemory and UnmapMemory are customized */
+#include "./cma/cma_backend.h" // Arma 3 CMA - Implement MapMemory with huge pages support
 #endif
 
 void* getRawMemory (size_t size, PageType pageType) {

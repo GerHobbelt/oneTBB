@@ -18,6 +18,13 @@ add_library(tbbmalloc
     frontend.cpp
     large_objects.cpp
     tbbmalloc.cpp
+    # Arma 3 CMA
+    ./cma/cma_api.cpp
+    ./cma/cma_api.h
+    ./cma/cma_backend.h
+    ./cma/cma_utils.cpp
+    ./cma/cma_utils.h
+    # Arma 3 CMA - End
     ../tbb/itt_notify.cpp)
 
 add_library(TBB::tbbmalloc ALIAS tbbmalloc)
