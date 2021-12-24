@@ -161,10 +161,12 @@ int UnmapMemory(void *area, size_t bytes)
 #include <windows.h>
 
 #define MEMORY_MAPPING_USES_MALLOC 0
-void* MapMemory (size_t bytes, PageType)
+//void* MapMemory (size_t bytes, PageType) // Arma 3 CMA - Add large pages support
+void* MapMemory(size_t bytes, PageType pageType)
 {
     /* Is VirtualAlloc thread safe? */
-    return VirtualAlloc(NULL, bytes, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    //return VirtualAlloc(NULL, bytes, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); // Arma 3 CMA - Add large pages support
+    return VirtualAlloc(NULL, bytes, MEM_RESERVE | MEM_COMMIT | (REGULAR == pageType ? NULL : MEM_LARGE_PAGES), PAGE_READWRITE); // Arma 3 CMA - Add large pages support
 }
 
 int UnmapMemory(void *area, size_t /*bytes*/)

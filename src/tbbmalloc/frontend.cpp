@@ -2092,10 +2092,8 @@ static bool doInitialization()
     /* It can't be 0 or I would have initialized it */
     MALLOC_ASSERT( mallocInitialized.load(std::memory_order_relaxed)==2, ASSERT_TEXT );
 
-    // Arma 3 CMA - Automatically detect huge pages support
-    if (CmaAcquireLockMemoryPrivileges())
+    if (CmaAcquireLockMemoryPrivileges()) // Arma 3 CMA - Automatically detect large pages support
         scalable_allocation_mode(USE_HUGE_PAGES, 1);
-    // Arma 3 CMA - End
 
     return true;
 }
@@ -3257,7 +3255,7 @@ extern "C" int scalable_allocation_mode(int param, intptr_t value)
         defaultMemPool->extMemPool.backend.setRecommendedMaxSize((size_t)value);
         return TBBMALLOC_OK;
     } else if (param == USE_HUGE_PAGES) {
-//#if __unix__ // Arma 3 CMA - Enable huge pages support on non-Unix OS
+//#if __unix__ // Arma 3 CMA - Enable large pages support on non-Unix OS
         switch (value) {
         case 0:
         case 1:
@@ -3266,7 +3264,7 @@ extern "C" int scalable_allocation_mode(int param, intptr_t value)
         default:
             return TBBMALLOC_INVALID_PARAM;
         }
-//#else // Arma 3 CMA - Enable huge pages support on non-Unix OS
+//#else // Arma 3 CMA - Enable large pages support on non-Unix OS
 //        return TBBMALLOC_NO_EFFECT;
 //#endif
 #if __TBB_SOURCE_DIRECTLY_INCLUDED
