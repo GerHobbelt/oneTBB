@@ -17,9 +17,9 @@ size_t __stdcall MemTotalReserved(void)
 	return 0;
 }
 
-size_t __stdcall MemFlushCache(size_t /*size*/)
+size_t __stdcall MemFlushCache(size_t size)
 {
-	return 0;
+	return size;
 }
 
 void __stdcall MemFlushCacheAll(void)
@@ -39,14 +39,12 @@ size_t __stdcall MemSizeA(void* mem, size_t /*align*/)
 
 void* __stdcall MemAlloc(size_t size)
 {
-	void* mem = scalable_malloc(size);
-	return mem;
+	return scalable_malloc(size);
 }
 
 void* __stdcall MemAllocA(size_t size, size_t align)
 {
-	void* mem = scalable_aligned_malloc(size, align);
-	return mem;
+	return scalable_aligned_malloc(size, align);
 }
 
 void __stdcall MemFree(void* mem)
