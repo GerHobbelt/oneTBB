@@ -803,7 +803,7 @@ static inline unsigned int highestBitPos(unsigned int n)
 }
 
 
-#if __TBB_x86_32 || __aarch32__
+#if __TBB_x86_32 || __aarch32__ || __ARM_32BIT_STATE
 unsigned int getSmallObjectIndex(unsigned int size)
 {
     return (size-1)>>3;
