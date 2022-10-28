@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2005-2021 Intel Corporation
+    Copyright (c) 2005-2022 Intel Corporation
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -69,7 +69,7 @@
 #define TRACEF(x) ((void)0)
 #endif /* MALLOC_TRACE */
 
-#define ASSERT_TEXT NULL
+#define ASSERT_TEXT nullptr
 
 #define COLLECT_STATISTICS ( MALLOC_DEBUG && MALLOCENV_COLLECT_STATISTICS )
 #ifndef USE_INTERNAL_TID
@@ -255,7 +255,7 @@ public:
     void unregisterThread(TLSRemote *tls);
     bool cleanup(bool cleanOnlyUnused);
     void markUnused();
-    void reset() { head = NULL; }
+    void reset() { head = nullptr; }
 };
 
 class LifoList {
@@ -678,7 +678,7 @@ class RecursiveMallocCallProtector {
     
 public:
 
-    RecursiveMallocCallProtector() : lock_acquired(NULL) {
+    RecursiveMallocCallProtector() : lock_acquired(nullptr) {
         lock_acquired = new (scoped_lock_space) MallocMutex::scoped_lock( rmc_mutex );
         if (canUsePthread)
             owner_thread.store(pthread_self(), std::memory_order_relaxed);
