@@ -24,7 +24,9 @@ size_t __stdcall MemFlushCache(size_t size)
 
 void __stdcall MemFlushCacheAll(void)
 {
+#ifndef NO_COLLECT
 	scalable_allocation_command(TBBMALLOC_CLEAN_THREAD_BUFFERS, nullptr);
+#endif
 }
 
 size_t __stdcall MemSize(void* mem)
