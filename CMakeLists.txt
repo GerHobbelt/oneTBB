@@ -330,6 +330,18 @@ if (TBB_EXAMPLES)
     add_subdirectory(examples)
 endif()
 
+
+if (TBB_DOC_EXAMPLES)
+    set(TBB_DOC_EXAMPLES_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/doc/main/examples_testing")
+    if (NOT EXISTS ${TBB_DOC_EXAMPLES_DIRECTORY})
+        message(FATAL_ERROR "Documentation examples are not found while testing was enabled")
+    else()
+        message(STATUS "Enabling testing for examples from documentation")
+        enable_testing()
+        add_subdirectory(${TBB_DOC_EXAMPLES_DIRECTORY})
+    endif()
+endif()
+
 if (TBB_BENCH)
     if (NOT EXISTS ${CMAKE_CURRENT_LIST_DIR}/benchmark)
         message(FATAL_ERROR "Benchmarks are not supported yet")
