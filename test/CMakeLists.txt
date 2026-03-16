@@ -500,6 +500,7 @@ if (TARGET TBB::tbb)
     tbb_add_test(SUBDIR tbb NAME test_write_once_node DEPENDENCIES TBB::tbb)
     tbb_add_test(SUBDIR tbb NAME test_async_node DEPENDENCIES TBB::tbb)
     tbb_add_test(SUBDIR tbb NAME test_input_node DEPENDENCIES TBB::tbb)
+    tbb_add_test(SUBDIR tbb NAME test_resource_limited_node DEPENDENCIES TBB::tbb)
     tbb_add_test(SUBDIR tbb NAME test_profiling DEPENDENCIES TBB::tbb)
     tbb_add_test(SUBDIR tbb NAME test_concurrent_queue_whitebox DEPENDENCIES TBB::tbb)
     tbb_add_test(SUBDIR tbb NAME test_intrusive_list DEPENDENCIES TBB::tbb)
@@ -572,6 +573,14 @@ if (TARGET TBB::tbb)
         if (NOT TBB_OPENMP_NO_LINK_FLAG)
             set_target_properties(test_openmp PROPERTIES LINK_FLAGS ${TBB_OPENMP_FLAG})
         endif()
+    endif()
+
+    if (UNIX)
+      tbb_add_test(SUBDIR tbb NAME test_cgroup_support)
+      target_include_directories(test_cgroup_support PRIVATE
+        $<TARGET_PROPERTY:TBB::tbb,INTERFACE_INCLUDE_DIRECTORIES>
+      )
+      target_link_libraries(test_cgroup_support PRIVATE Threads::Threads)
     endif()
 
     # Define the conformance tests
