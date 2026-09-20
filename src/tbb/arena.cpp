@@ -1,6 +1,6 @@
 /*
     Copyright (c) 2005-2025 Intel Corporation
-    Copyright (c) 2025-2026 UXL Foundation Contributors
+    Copyright (c) 2025 UXL Foundation Contributors
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -50,7 +50,7 @@ public:
         restore_affinity_mask(my_binding_handler, this_task_arena::current_thread_index());
     }
 
-    hwloc_bitmap_t get_affinity_mask() const {
+    tcm_cpu_mask_t get_affinity_mask() const {
         return r1::get_affinity_mask(my_binding_handler);
     }
 
@@ -277,7 +277,6 @@ arena::arena(threading_control* control, unsigned num_slots, unsigned num_reserv
         my_slots[i].init_task_streams(i);
         my_slots[i].my_default_task_dispatcher = new(base_td_pointer + i) task_dispatcher(this);
         my_slots[i].my_is_occupied.store(false, std::memory_order_relaxed);
-        my_slots[i].accessed_by_owner.store(false, std::memory_order_relaxed);
     }
     my_fifo_task_stream.initialize(my_num_slots);
     my_resume_task_stream.initialize(my_num_slots);
@@ -374,7 +373,7 @@ bool arena::has_tasks() {
     std::size_t n = my_limit.load(std::memory_order_acquire);
     bool tasks_are_available = false;
     for (std::size_t k = 0; k < n && !tasks_are_available; ++k) {
-        tasks_are_available = my_slots[k].has_tasks();
+        tasks_are_available = !my_slots[k].is_empty();
     }
     tasks_are_available = tasks_are_available || has_enqueued_tasks() || !my_resume_task_stream.empty();
 #if __TBB_CRITICAL_TASKS
@@ -450,7 +449,7 @@ std::pair<int, int> arena::update_request(int mandatory_delta, int workers_delta
     return { min_workers_request, max_workers_request };
 }
 
-hwloc_bitmap_t arena::get_affinity_mask() const {
+tcm_cpu_mask_t arena::get_affinity_mask() const {
     if (my_numa_binding_observer) {
         return my_numa_binding_observer->get_affinity_mask();
     }

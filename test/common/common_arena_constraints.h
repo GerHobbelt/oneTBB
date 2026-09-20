@@ -1,6 +1,6 @@
 /*
     Copyright (c) 2019-2025 Intel Corporation
-    Copyright (c) 2025-2026 UXL Foundation Contributors
+    Copyright (c) 2025 UXL Foundation Contributors
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -94,7 +94,7 @@ int get_processors_group_count() { return 1; }
 #define __HWLOC_HYBRID_CPUS_INTERFACES_VALID (!_WIN32 || _WIN64)
 
 #define __HYBRID_CPUS_TESTING __HWLOC_HYBRID_CPUS_INTERFACES_PRESENT && __HWLOC_HYBRID_CPUS_INTERFACES_VALID
-#define __HWLOC_CPUBIND_PRESENT (!__APPLE__)
+#define __HWLOC_CPUBIND_PRESENT (!__APPLE__ && !__gnu_hurd__)
 
 // Macro to check hwloc interfaces return codes
 #define hwloc_require_ex(command, ...)                                          \

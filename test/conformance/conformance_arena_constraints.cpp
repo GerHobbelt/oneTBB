@@ -1,6 +1,6 @@
 /*
     Copyright (c) 2019-2025 Intel Corporation
-    Copyright (c) 2025-2026 UXL Foundation Contributors
+    Copyright (c) 2025 UXL Foundation Contributors
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -157,7 +157,8 @@ TEST_CASE("Test reserved slots argument in create_numa_task_arenas") {
             [](const index_info &lhs, const index_info &rhs) {
                 return lhs.concurrency < rhs.concurrency;
             })->concurrency;
-
+    const int max_threads = int(utils::get_platform_max_threads()); // respects cgroup
+    const int max_tbb_workers = max_threads - 1;
     for (int reserved_slots = 0; reserved_slots <= expected_numa_concurrency; ++reserved_slots) {
         auto numa_task_arenas = tbb::create_numa_task_arenas({}, reserved_slots);
         tbb::task_group tg{};
@@ -165,7 +166,7 @@ TEST_CASE("Test reserved slots argument in create_numa_task_arenas") {
         // concurrnecy of the single NUMA - 1. This means that for task_arena with reserved_slots=0
         // worker threads won't be able to fully saturate the arena.
         // This flag is set to adjust test expectations accordingly.
-        bool workers_cannot_fully_occupy_arena = numa_nodes_info.size() == 1 && reserved_slots == 0;
+        bool workers_cannot_fully_occupy_arena = max_tbb_workers < expected_numa_concurrency && reserved_slots == 0;
         for (auto& ta : numa_task_arenas) {
             // For the case when task_arena is created with both max_concurrency and reserved_slots
             // equal to 1 oneTBB creates a special additional worker to execute an "enqueue" task.

@@ -1,6 +1,6 @@
 /*
     Copyright (c) 2005-2025 Intel Corporation
-    Copyright (c) 2025-2026 UXL Foundation Contributors
+    Copyright (c) 2025 UXL Foundation Contributors
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -865,6 +865,11 @@ TEST_CASE("Check correct arena destruction with enqueue") {
     }
 }
 
+#if !__TBB_USE_ADDRESS_SANITIZER
+// The test enforces memory leak of observers, expecting that by the time when scheduler releases 
+// and the resources cleanup starts, the observers will be destroyed. Otherwise, the memory will be
+// cleared during process shutdown, but this is seen as a leak by ASAN; hence skipping the test.
+
 //! \brief \ref regression
 TEST_CASE("Try to force Leaked proxy observers warning") {
     int num_threads = std::thread::hardware_concurrency() * 2;
@@ -885,6 +890,7 @@ TEST_CASE("Try to force Leaked proxy observers warning") {
         });
     });
 }
+#endif // !__TBB_USE_ADDRESS_SANITIZER
 
 //! \brief \ref error_guessing
 TEST_CASE("Force thread limit on per-thread reference_vertex") {
