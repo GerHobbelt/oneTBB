@@ -15,7 +15,7 @@
 */
 
 //! \file test_tbb_header_module.cppm
-//! \brief C++20 module interface unit to test TBB public API for TU-local entity exposure
+//! \brief C++20 module interface unit to test TBB public API included as part of global module fragment
 module;
 // Preprocessing macros from test_tbb_header.cpp
 #if __INTEL_COMPILER && _MSC_VER

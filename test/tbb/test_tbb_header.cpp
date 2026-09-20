@@ -25,7 +25,7 @@
     Most of the checks happen at the compilation or link phases.
 **/
 
-#if !__TBB_TEST_MODULE_EXPORT
+#if !__TBB_TEST_MODULE_EXPORT && !__TBB_IN_MODULE_USE
 
 #if __INTEL_COMPILER && _MSC_VER
 #pragma warning(disable : 2586) // decorated name length exceeded, name was truncated
@@ -80,12 +80,12 @@
 #undef _DEBUG
 #endif /* !TBB_USE_DEBUG && defined(_DEBUG) */
 
-#if __TBB_TEST_SECONDARY && TBB_PREVIEW_MEMORY_POOL && defined(_CRTDBG_MAP_ALLOC)
+#if __TBB_TEST_SECONDARY && __TBB_PREVIEW_MEMORY_POOL && defined(_CRTDBG_MAP_ALLOC)
 // when _CRTDBG_MAP_ALLOC is defined, the base versions of malloc, free and realloc are replaced with
 // their debug versions with different amount of arguments. It is implemented as #define malloc(x) _malloc_dbg(x, additional-args)
 // that breaks the definition of tbb::detail::d1::base_pool::malloc/free/realloc
 // excluding memory_pool.h from testing when this mode is enabled
-#undef TBB_PREVIEW_MEMORY_POOL
+#undef __TBB_PREVIEW_MEMORY_POOL
 #endif
 
 #include "tbb/tbb.h"
@@ -98,7 +98,7 @@
 // Missing exports result either in link error or in runtime assertion failure.
 #include <stdexcept>
 
-#endif /* !__TBB_TEST_MODULE_EXPORT */
+#endif /* !__TBB_TEST_MODULE_EXPORT && !__TBB_IN_MODULE_USE */
 
 #if __TBB_TEST_MODULE_EXPORT
 inline volatile size_t g_sink;
@@ -149,9 +149,12 @@ struct Body3a { // for lambda-friednly parallel_scan
     int operator() ( const tbb::blocked_range<int>&, const int, bool ) const { return 0; }
 };
 struct Msg {};
+
+#if __TBB_RESUMABLE_TASKS
 struct SuspendBody {
     void operator()(tbb::task::suspend_point) const {}
 };
+#endif
 
 template <typename E>
 void TestExceptionClassExports ( const E& exc, tbb::detail::exception_id eid ) {
@@ -194,7 +197,7 @@ static void TestExceptionClassesExports () {
     TestExceptionClassExports( tbb::unsafe_wait("test"), tbb::detail::exception_id::unsafe_wait );
 }
 
-#if __TBB_CPF_BUILD
+#if __TBB_TEST_PREVIEW
 // These names are only tested in "preview" configuration
 // When a feature becomes fully supported, its names should be moved to the main test
 #if __TBB_TEST_MODULE_EXPORT
@@ -204,7 +207,7 @@ static void TestPreviewNames() {
 #endif
     TestTypeDefinitionPresence2( concurrent_lru_cache<int, int> );
     TestTypeDefinitionPresence( isolated_task_group );
-#if TBB_PREVIEW_MEMORY_POOL
+#if __TBB_PREVIEW_MEMORY_POOL
     TestTypeDefinitionPresence( memory_pool_allocator<int> );
     TestTypeDefinitionPresence( memory_pool<std::allocator<int>> );
     TestTypeDefinitionPresence( fixed_pool );
@@ -218,6 +221,10 @@ static void TestPreviewNames() {
     TestTypeDefinitionPresence( task_arena::scoped_parallel_phase );
     TestFuncDefinitionPresence( this_task_arena::start_parallel_phase, (), void );
     TestFuncDefinitionPresence( this_task_arena::end_parallel_phase, (bool), void );
+#endif
+#if __TBB_PREVIEW_NUMA_ALLOCATION
+    TestFuncDefinitionPresence( allocate_numa_interleaved, (size_t, size_t), void* );
+    TestFuncDefinitionPresence( deallocate_numa_interleaved, (void*, size_t), void );
 #endif
 }
 #endif
@@ -279,6 +286,10 @@ static void DefinitionPresence() {
     TestTypeDefinitionPresence( flow::limiter_node<int> );
     TestTypeDefinitionPresence2(flow::indexer_node<int, int> );
     TestTypeDefinitionPresence2(flow::composite_node<std::tuple<int>, std::tuple<int> > );
+#if __TBB_PREVIEW_FLOW_GRAPH_RESOURCE_LIMITING
+    TestTypeDefinitionPresence( flow::resource_limiter<int> );
+    TestTypeDefinitionPresence2(flow::resource_limited_node<int, std::tuple<int> > );
+#endif
     TestTypeDefinitionPresence( flow::graph_node );
     TestTypeDefinitionPresence( flow::reset_flags );
     TestTypeDefinitionPresence( flow::tag_value );
@@ -372,7 +383,7 @@ static void DefinitionPresence() {
     TestFuncDefinitionPresence( task::suspend, (SuspendBody), void );
 #endif
 
-#if __TBB_CPF_BUILD
+#if __TBB_TEST_PREVIEW
     TestPreviewNames();
 #endif
 #ifdef DO_TEST_DEBUG_MACRO
